@@ -1,0 +1,49 @@
+version: '2.1'
+services:
+  payment_manager:
+    build: .
+    command: ./bin/www
+    volumes:
+      - .:/build
+      - /build/node_modules
+    ports:
+      - "3000:3000"
+    depends_on:
+      - rabbitmq
+      - mongo
+      - redis
+    environment:
+      MONGO_URI: mongodb://mongo/payment_manager
+      RABBIT_URI: amqp://rabbitmq:rabbitmq@rabbitmq/
+      REDIS_URI: redis://redis:6379/
+      DEBUG: "${DEBUG}"
+  rabbitmq:
+    image: rabbitmq:management-alpine
+    environment:
+      RABBITMQ_DEFAULT_USER: "rabbitmq"
+      RABBITMQ_DEFAULT_PASS: "rabbitmq"
+      RABBITMQ_DEFAULT_VHOST: "/"
+    ports:
+      - "15672:15672"
+      - "5672:5672"
+    expose:
+      - "5672"
+      - "15672"
+    volumes:
+      - ./data/mongo:/data/db
+  mongo:
+    image: mongo
+    ports:
+      - "27017:27017"
+    expose:
+      - "27017"
+    volumes:
+      - ./data/mongo:/data/db
+  redis:
+    image: "redis:alpine"
+    ports:
+      - "6379:6379"
+    expose:
+      - "6379"
+    volumes:
+      - ./data/redis:/data

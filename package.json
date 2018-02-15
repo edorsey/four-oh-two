@@ -1,0 +1,25 @@
+{
+  "name": "four-oh-two",
+  "version": "0.0.1",
+  "description": "HTTP 402 Payment Required Implementation",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "402",
+    "Payment",
+    "Required",
+    "Nano"
+  ],
+  "author": "Eric Dorsey (eric@ericdorsey.com)",
+  "license": "MIT",
+  "dependencies": {
+    "date-fns": "^1.29.0",
+    "jsonwebtoken": "^8.1.1",
+    "rai-wallet": "^0.2.2",
+    "raiblocks": "^0.4.0",
+    "request": "^2.83.0"
+  },
+  "devDependencies": {}
+}
