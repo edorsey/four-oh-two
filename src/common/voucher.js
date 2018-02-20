@@ -2,6 +2,9 @@ const R = require("ramda")
 let jwt = require("jsonwebtoken")
 let Wallet = require("rai-wallet")
 let {addDays} = require("date-fns")
+let blake = require("blakejs")
+let nacl = require("tweetnacl/nacl") //We are using a forked version of tweetnacl, so need to import nacl
+
 
 function btoa(str) {
   return new Buffer(str).toString("base64").replace(/\=+$/, "")
