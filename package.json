@@ -4,7 +4,7 @@
   "description": "HTTP 402 Payment Required Implementation",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "mocha"
   },
   "keywords": [
     "402",
@@ -15,11 +15,18 @@
   "author": "Eric Dorsey (eric@ericdorsey.com)",
   "license": "MIT",
   "dependencies": {
+    "blakejs": "^1.1.0",
     "date-fns": "^1.29.0",
     "jsonwebtoken": "^8.1.1",
     "rai-wallet": "^0.2.2",
     "raiblocks": "^0.4.0",
-    "request": "^2.83.0"
+    "ramda": "^0.25.0",
+    "request": "^2.83.0",
+    "tweetnacl": "git+https://git@github.com/jaimehgb/tweetnacl-js.git#ef9ea5fd95c3ca98128877c58e40ef1a711421ef"
   },
-  "devDependencies": {}
+  "devDependencies": {
+    "chai": "^4.1.2",
+    "mocha": "^5.0.1",
+    "rewire": "^3.0.2"
+  }
 }
