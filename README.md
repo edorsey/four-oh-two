@@ -6,7 +6,7 @@ This module implements an experimental micro-transaction layer on top of HTTP us
 
 Nano is unique because the nodes are designed to run on commodity hardware and offers zero transaction fees. Zero transaction fees unlock a number of useful applications that are not previous where transaction fees are non-zero.
 
-Potentially the Lightning Network could run facilitate this functionality as well, we will attempt to make the implementation currency-agnostic.
+Potentially the Lightning Network could facilitate this functionality as well, we will attempt to make the implementation currency-agnostic.
 
 ## Jobs to be Done
 
