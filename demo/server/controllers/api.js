@@ -6,7 +6,8 @@ router.use(fourOhTwo({
   cost: .0001,
   costPer: "access",
   currency: "NANO",
-  accountAddress: "xrb_1234"
+  serviceAccount: process.env.NANO_ACCOUNT,
+  hostname: process.env.HOSTNAME
 }))
 
 /* GET users listing. */
