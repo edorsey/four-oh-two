@@ -1,11 +1,65 @@
+const R = require("ramda")
 let jwt = require("jsonwebtoken")
-let dateFns = require("date-fns")
+let Wallet = require("rai-wallet")
+let {addDays} = require("date-fns")
 
-function encode() {
+function btoa(str) {
+  return new Buffer(str).toString("base64").replace(/\=+$/, "")
+}
+
+function encode(data) {
+  return R.pipe(createJWT, signAndEncryptJWT)(data)
+}
+
+function decode(voucher) {
+  return R.pipe(decrypt, verify, parseJWT)(data)
+}
+
+function createJWT(data) {
+  let header = {
+    typ: "JWT",
+    alg: "x25519"
+  }
+
+  let tomorrow = 24 * 60 * 60 * 1000 + (new Date()).getTime()
+
+  let empty = {
+    hostname: "",
+    exp: tomorrow
+  }
+
+  let payload = R.merge(empty, data)
+
+  let encodeSection = R.pipe(JSON.stringify, btoa)
+
+  let message = `${encodeSection(header)}.${encodeSection(payload)}`
+
+  console.log("MESSAGE", message)
+
+  return message
+}
+
+function signJWT(jwt) {
 
 }
 
-function decode() {
+function verifyJWT(decryptedVoucher) {
+
+}
+
+function encrypt(jwt) {
+
+}
+
+function decrypt(voucher) {
+
+}
+
+function verifyVoucher(voucher) {
+
+}
+
+function parseJWT(jwt) {
 
 }
 
