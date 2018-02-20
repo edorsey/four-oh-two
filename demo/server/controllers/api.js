@@ -10,7 +10,6 @@ router.use(fourOhTwo({
   hostname: process.env.HOSTNAME
 }))
 
-/* GET users listing. */
 router.get("/", function(req, res, next) {
   res.json({})
 })
