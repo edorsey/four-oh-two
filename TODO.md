@@ -1,5 +1,6 @@
-# Misc
-- [ ] Implement a config
+# Server Middleware
+- [ ] Implement 402 response and data payload
+
 
 # Vouchers
 
@@ -8,6 +9,7 @@
 
 
 # Payment Manager
+- [ ] Implement a config
 - [ ] Register RPC callback with node
 - [ ] Nano node RPC callback feed
 - [ ] Create wallet
