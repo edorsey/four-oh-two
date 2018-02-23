@@ -1,6 +1,6 @@
 let express = require("express")
 let router = express.Router()
-let fourOhTwo = require("../../../src/server")
+let fourOhTwo = require("../../../src/server-module")
 
 router.use(fourOhTwo({
   cost: .0001,
@@ -11,7 +11,7 @@ router.use(fourOhTwo({
 }))
 
 router.get("/", function(req, res, next) {
-  res.json({})
+  res.json("Hello world.")
 })
 
 function mount(app) {

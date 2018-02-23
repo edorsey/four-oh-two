@@ -1,14 +1,34 @@
-let voucher = require("../common/voucher")
+let {Wallet} = require("rai-wallet")
+
+let MiddlwareError = require("./middleware-error")
+
+let serviceWallet = Wallet("TEST")
+
+let serviceSeed = "5106F02332991576DC2A95DC74AB8B7F985F42382B8BAAE84FAA6794AE78851F"
+
+serviceWallet.createWallet(serviceSeed)
+
+let serviceAccounts = serviceWallet.getAccounts()
+let servicePaymentAccount = serviceAccounts[0].account
 
 function fourOhTwo(opts = {}) {
   return function middleware(req, res, next) {
-    if (!req.headers["X-Payment-Voucher"]) return res.status(402).json(generate402(opts))
-
-    let voucher = decodeVoucher(req.headers["X-Payment-Voucher"], env.process.nanoPrivateKey)
-
-    if (!verifyVoucher(voucher)) return res.status(402).json(generate402(opts))
-
     setPaymentHeaders(res, opts)
+    if (!req.headers["x-payment-voucher"]) {
+      return res.status(402).json(generate402(opts))
+    }
+
+    let encodedVoucher = req.headers["x-payment-voucher"]
+    let clientPaymentAccount = req.headers["x-payment-account-address"]
+
+    if (!serviceWallet.verifyVoucher(encodedVoucher, clientPaymentAccount)) {
+      return res.status(402).json(generate402(opts))
+    }
+
+    let {voucher} = serviceWallet.decodeVoucher(encodedVoucher, clientPaymentAccount)
+
+    if (voucher.servicePaymentAccount !== servicePaymentAccount) throw new MiddlwareError("Service payment account does not match voucher", {statusCode: 400})
+    if (voucher.clientPaymentAccount !== clientPaymentAccount) throw new MiddlwareError("Client payment account does not match voucher", {statusCode: 400})
 
     next()
 
@@ -23,29 +43,17 @@ function generate402(opts = {}) {
   }
 }
 
-function decodeVoucher(voucher, key) {
-  return voucher.decode(voucher, key)
-}
-
-function verifyVoucher(voucher) {
-  let account = voucher.clientAccount
-  let publicKey = nanoAccountToPublicKey(account)
-
-  return voucher.verifyVoucher(voucher, publicKey)
-}
-
 function setPaymentHeaders(res, opts = {}) {
   let cost = 0
 
   if (opts.cost) cost = opts.cost
 
-  res.setHeader("Content-Cost", cost)
-  res.setHeader("Content-Account-Address", opts.serviceAccount)
-  res.setHeader("Content-Cost-Per", opts.costPer)
-  res.setHeader("Content-Cost-Currency", opts.currency)
+  res.setHeader("X-Content-Cost", cost.toString())
+  res.setHeader("X-Content-Account-Address", servicePaymentAccount)
+  res.setHeader("X-Content-Cost-Per", opts.costPer)
+  res.setHeader("X-Content-Cost-Currency", opts.currency)
 
   return res
 }
 
 module.exports = fourOhTwo
-module.exports.voucher = voucher
