@@ -4,30 +4,76 @@
  * Module dependencies.
  */
 
-let app = require("../app")
+let async = require("async")
 let debug = require("debug")("server:server")
 let http = require("http")
+
+let app = require("../app")
+let mongo = require("../services/mongo")
+let nano = require("../services/nano")
 
 /**
  * Get port from environment and store in Express.
  */
 
-let port = normalizePort(process.env.PORT || "3000")
+let server
+
+let port = normalizePort(process.env.PORT || "3402")
 app.set("port", port)
 
-/**
- * Create HTTP server.
- */
+async.waterfall([
+  mongo.connect,
+  bootstrapIfNeeded,
+  createServer
+], (err) => {
+  if (err) throw err
 
-let server = http.createServer(app)
+  let addr = server.address()
+  let bind = typeof addr === "string"
+    ? "pipe " + addr
+    : "port " + addr.port
 
-/**
- * Listen on provided port, on all network interfaces.
- */
+  debug(`Listening on ${bind}`)
+})
 
-server.listen(port)
-server.on("error", onError)
-server.on("listening", onListening)
+function bootstrapIfNeeded(db, next) {
+  async.waterfall([
+    checkBootstrap(db),
+    bootstrap
+  ], function bootstrapped(err) {
+    if (err) return next(err)
+    next(null, db)
+  })
+}
+
+function checkBootstrap(db) {
+  return function callCheckBootstrap(next) {
+    db.collection("settings").findOne({
+      "name": "bootstrapped"
+    }, next)
+  }
+}
+
+function bootstrap(setting, next) {
+  if (!next) {
+    next = setting
+    setting = null
+  }
+
+  if (setting && setting.value === true) return next()
+
+  nano.bootstrap(next)
+}
+
+function createServer(db, next) {
+  server = http.createServer(app)
+
+  app.set("db", db)
+
+  server.listen(port)
+  server.on("error", onError)
+  server.on("listening", next)
+}
 
 /**
  * Normalize a port into a number, string, or false.
@@ -77,14 +123,9 @@ function onError(error) {
   }
 }
 
-/**
- * Event listener for HTTP server "listening" event.
- */
+process.on("uncaughtException", function onUncaughtException(err) {
+  console.log(err)
+  process.exit(1)
+})
 
-function onListening() {
-  let addr = server.address()
-  let bind = typeof addr === "string"
-    ? "pipe " + addr
-    : "port " + addr.port
-  debug(`Listening on ${bind}`)
-}
+process.on("SIGINT", process.exit)

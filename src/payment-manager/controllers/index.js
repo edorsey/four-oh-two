@@ -1,13 +1,7 @@
-let express = require("express")
-let router = express.Router()
+let hookController = require("./hook")
 
-/* GET home page. */
-router.get("/", function(req, res, next) {
-  res.render("index", { title: "Express" })
-})
-
-function mount(app) {
-  app.use(router)
+function mountControllers(app) {
+  hookController(app)
 }
 
-module.exports = mount
+module.exports = mountControllers

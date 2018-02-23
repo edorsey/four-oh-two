@@ -7,11 +7,12 @@ services:
       - .:/build
       - /build/node_modules
     ports:
-      - "3000:3000"
+      - "3402:3402"
     depends_on:
       - rabbitmq
       - mongo
       - redis
+      - nano
     environment:
       MONGO_URI: mongodb://mongo/payment_manager
       RABBIT_URI: amqp://rabbitmq:rabbitmq@rabbitmq/
@@ -47,3 +48,11 @@ services:
       - "6379"
     volumes:
       - ./data/redis:/data
+  nano:
+    image: "nanocurrency/nano"
+    ports:
+      - "7075:7075/udp"
+      - "7075:7075"
+      - "127.0.0.1:7076:7076"
+    volumes:
+      - ./data/nano:/root
