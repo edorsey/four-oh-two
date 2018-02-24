@@ -33,7 +33,7 @@ async.waterfall([
     ? "pipe " + addr
     : "port " + addr.port
 
-  debug(`Listening on ${bind}`)
+  console.log(`Listening on ${bind}`)
 })
 
 function bootstrapIfNeeded(db, next) {
