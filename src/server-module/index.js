@@ -30,7 +30,14 @@ function fourOhTwo(opts = {}) {
     if (voucher.servicePaymentAccount !== servicePaymentAccount) throw new MiddlwareError("Service payment account does not match voucher", {statusCode: 400})
     if (voucher.clientPaymentAccount !== clientPaymentAccount) throw new MiddlwareError("Client payment account does not match voucher", {statusCode: 400})
 
-    next()
+    verifyVoucherWithPaymentService(opts, (err) => {
+      if (err) return next(err)
+      next()
+    })
+
+    req.on("end", function () {
+      recordVoucherUsageWithPaymentService()
+    })
 
   }
 }
@@ -54,6 +61,15 @@ function setPaymentHeaders(res, opts = {}) {
   res.setHeader("X-Content-Cost-Currency", opts.currency)
 
   return res
+}
+
+function verifyVoucherWithPaymentService(opts, cb) {
+  console.log("VERIFY VOUCHER WITH PAYMENT SERVICE")
+  return cb()
+}
+
+function recordVoucherUsageWithPaymentService(opts) {
+  console.log("RECORD VOUCHER USAGE WITH PAYMENT SERVICE")
 }
 
 module.exports = fourOhTwo
