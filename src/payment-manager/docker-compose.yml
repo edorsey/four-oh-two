@@ -9,29 +9,13 @@ services:
     ports:
       - "3402:3402"
     depends_on:
-      - rabbitmq
       - mongo
       - redis
       - nano
     environment:
       MONGO_URI: mongodb://mongo/payment_manager
-      RABBIT_URI: amqp://rabbitmq:rabbitmq@rabbitmq/
       REDIS_URI: redis://redis:6379/
       DEBUG: "${DEBUG}"
-  rabbitmq:
-    image: rabbitmq:management-alpine
-    environment:
-      RABBITMQ_DEFAULT_USER: "rabbitmq"
-      RABBITMQ_DEFAULT_PASS: "rabbitmq"
-      RABBITMQ_DEFAULT_VHOST: "/"
-    ports:
-      - "15672:15672"
-      - "5672:5672"
-    expose:
-      - "5672"
-      - "15672"
-    volumes:
-      - ./data/mongo:/data/db
   mongo:
     image: mongo
     ports:
@@ -39,7 +23,7 @@ services:
     expose:
       - "27017"
     volumes:
-      - ./data/mongo:/data/db
+      - ../../data/mongo:/data/db
   redis:
     image: "redis:alpine"
     ports:
@@ -47,12 +31,12 @@ services:
     expose:
       - "6379"
     volumes:
-      - ./data/redis:/data
+      - ../../data/redis:/data
   nano:
     image: "nanocurrency/nano"
     ports:
       - "7075:7075/udp"
       - "7075:7075"
-      - "127.0.0.1:7076:7076"
+      - "7076:7076"
     volumes:
-      - ./data/nano:/root
+      - ../../data/nano:/root
