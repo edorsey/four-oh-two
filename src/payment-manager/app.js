@@ -38,7 +38,16 @@ app.use(function(err, req, res, next) {
 
   // render the error page
   res.status(err.status || 500)
-  res.render("error")
+
+  let response = {
+    error: err.message
+  }
+
+  if (req.app.get("env") === "development") {
+    response.stack = err.stack
+  }
+
+  res.json(response)
 })
 
 module.exports = app
