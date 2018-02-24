@@ -34,6 +34,8 @@ function getRequestOpts(paymentOpts) {
     headers["X-Payment-Voucher"] = voucher
   }
 
+  console.log("HEADERS", headers)
+
   return {
     url,
     headers
