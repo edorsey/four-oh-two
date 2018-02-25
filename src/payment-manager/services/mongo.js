@@ -37,7 +37,11 @@ function retry(cb) {
   }, 1000)
 }
 
+function getDB() {
+  return database
+}
+
 module.exports = {
   connect,
-  db: database
+  getDB
 }
