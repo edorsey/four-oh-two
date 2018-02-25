@@ -3,6 +3,7 @@ let BigNumber = require("bignumber.js")
 let express = require("express")
 let {Wallet} = require("rai-wallet")
 
+let mongo = require("../services/mongo")
 let nanoAccounts = require("../config/nano-accounts")
 let NanoClient = require("node-raiblocks-rpc")
 
@@ -16,8 +17,9 @@ let serviceSeed = "5106F02332991576DC2A95DC74AB8B7F985F42382B8BAAE84FAA6794AE788
 serviceWallet.createWallet(serviceSeed)
 
 
-router.post("/verify", verifyVoucher, verifyFunds, returnVerificationResult)
-router.post("/use", verifyVoucher, verifyFunds, deductBalance, returnVoucherBalance)
+router.post("/verify", verifyVoucher, getVoucherBlocks, getVoucherUsage, returnVerificationResult)
+router.post("/use", verifyVoucher, getVoucherBlocks, getVoucherUsage, verifyFunds, deductCost, returnVoucherBalance)
+router.post("/refund", verifyVoucher, verifyFunds, refundBalance, returnVoucherBalance)
 
 function verifyVoucher(req, res, next) {
   let signatureChecksOut = serviceWallet.verifyVoucher(req.body.voucher, req.body.paymentAccountAddress)
@@ -34,14 +36,11 @@ function verifyVoucher(req, res, next) {
   next()
 }
 
-function verifyFunds(req, res, next) {
+function getVoucherBlocks(req, res, next) {
   let {voucher} = req
-
   let servicePaymentAccount = nanoAccounts[0]
 
   nano.accounts_pending([servicePaymentAccount], 1, 100, true).then(function(pending) {
-    console.log("PENDING", pending.blocks[servicePaymentAccount])
-
     //Let's pretend...
     pending = {
       blocks: {
@@ -62,32 +61,121 @@ function verifyFunds(req, res, next) {
 
     if (voucherBlocks.length === 0) return next(new Error("No payment blocks found."))
 
-    let {cost} = req.body
+    req.voucher.blocks = voucherBlocks
 
-    let voucherBlock = voucherBlocks[0] //Need to support multiple at some point
-    let voucherAmountUsed = 0
+    next()
+  })
+  .catch(next)
+}
 
-    console.log(cost, voucherBlock.amount, voucherAmountUsed, BigNumber(voucherBlock.amount).minus(voucherAmountUsed).toFormat(), cost > (voucherBlock.amount - voucherAmountUsed))
+function getVoucherUsage(req, res, next) {
+  let blockHashes = _.map(req.voucher.blocks, "hash")
 
-    if (cost > (Number(voucherBlock.amount) - voucherAmountUsed)) return next(new Error("Resource costs more than the value of the voucher."))
+  let db = mongo.getDB()
 
-    return next()
-  }).catch(next)
+  db.collection("voucher-usage").find({
+    blockHash: { $in: blockHashes }
+  }, { sort: { createdAt: -1 } }).toArray(function foundVoucherUsage(err, voucherUsage) {
+    if (err) return next(err)
+
+    req.voucher.blocks = _.map(req.voucher.blocks, (block) => {
+      block.uses = []
+      return block
+    })
+
+    if (!voucherUsage) return next()
+
+    req.voucher.blocks = _.reduce(voucherUsage, (blocks, voucherUse) => {
+      let block = _.find(blocks, (block) => block.hash === voucherUse.blockHash)
+
+      block.uses.push(voucherUse)
+
+      return blocks
+    }, req.voucher.blocks)
+
+    next()
+  })
+}
+
+function calculateVoucherUsage(blocks) {
+  return _.map(blocks, (block) => {
+    block.amountUsed = _.reduce(block.uses, (totalAmountUsed, use) => {
+      console.log("TOTAL AMOUNT USED", totalAmountUsed)
+      return totalAmountUsed.plus(BigNumber(use.amount || 0))
+    }, BigNumber(0))
+
+    block.amountLeft = BigNumber(block.amount).minus(block.amountUsed)
+
+    return block
+  })
+}
+
+function verifyFunds(req, res, next) {
+  let {voucher} = req
+
+  let {cost} = req.body
+
+  voucher.blocks = calculateVoucherUsage(voucher.blocks)
+
+  let blocks = _.reduce(voucher.blocks, (blocks, block) => {
+    if (block.amountLeft.isLessThan(BigNumber(cost))) {
+      blocks.used.push(block)
+    }
+    else {
+      blocks.available.push(block)
+    }
+
+    return blocks
+  }, { used: [], available: [] })
+
+  //Need to refund these used blocks eventually
+
+  console.log("BLOCKS", blocks)
+
+  if (blocks.available.length === 0) {
+    return next(new Error("Resource costs more than the value of the voucher."))
+  }
+
+  voucher.block = blocks.available[0]
+
+  return next()
 }
 
 function returnVerificationResult(req, res, next) {
   res.json(req.voucher)
 }
 
-function deductBalance(req, res, next) {
+function deductCost(req, res, next) {
   if (!req.body.cost) return next(new Error("Cost to deduct not supplied."))
+
+  let {voucher} = req
+  let {cost} = req.body
+
+  let use = {
+    blockHash: voucher.block.hash,
+    amount: cost
+  }
+
+  let db = mongo.getDB()
+
+  db.collection("voucher-usage").insertOne(use, (err, result) => {
+    if (err) return next(err)
+    voucher.block.uses.push(use)
+    next()
+  })
+}
+
+function refundBalance(req, res, next) {
 
   next()
 }
 
 function returnVoucherBalance(req, res, next) {
+  let {voucher} = req
 
-  res.json({})
+  voucher.blocks = calculateVoucherUsage(voucher.blocks)
+
+  res.json(voucher)
 }
 
 
