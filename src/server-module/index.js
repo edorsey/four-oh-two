@@ -37,15 +37,15 @@ function fourOhTwo(opts = {}) {
     if (voucher.servicePaymentAccount !== servicePaymentAccount) throw new MiddlewareError("Service payment account does not match voucher", {statusCode: 400})
     if (voucher.clientPaymentAccount !== clientPaymentAccount) throw new MiddlewareError("Client payment account does not match voucher", {statusCode: 400})
 
-    verifyVoucherWithPaymentService(encodedVoucher, clientPaymentAccount, opts, (err) => {
+    verifyVoucherWithPaymentService(encodedVoucher, clientPaymentAccount, opts, (err, voucher) => {
       if (err) return next(err)
+      res.setHeader("X-Payment-Account-Balance", voucher.balance)
       next()
     })
 
     req.on("end", function () {
       recordVoucherUsageWithPaymentService(encodedVoucher, clientPaymentAccount, opts)
     })
-
   }
 }
 
@@ -85,9 +85,8 @@ function verifyVoucherWithPaymentService(encodedVoucher, clientPaymentAccount, o
 
   request(requestOpts, (err, response, body) => {
     if (err) return cb(err)
-    console.log("VERIFY VOUCHER - SERVICE RESPONSE", response.statusCode, body)
     if (response.statusCode !== 200) return cb(new MiddlewareError(body.err, {statusCode: response.statusCode}))
-    return cb()
+    return cb(null, body)
   })
 
 }
@@ -106,10 +105,10 @@ function recordVoucherUsageWithPaymentService(encodedVoucher, clientPaymentAccou
   }
 
   request(requestOpts, (err, response, body) => {
-    if (err) return cb(err)
+    if (err) {
+      console.log("ERROR RECORDING USAGE, TRANSACTION FREE") //Probably something to handle
+    }
     console.log("RECORD USAGE - SERVICE RESPONSE", response.statusCode, body)
-    if (response.statusCode !== 200) return cb(new MiddlewareError(body.err, {statusCode: response.statusCode}))
-    return cb()
   })
 }
 
