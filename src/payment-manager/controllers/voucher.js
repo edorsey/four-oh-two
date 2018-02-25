@@ -4,6 +4,7 @@ let express = require("express")
 let {Wallet} = require("rai-wallet")
 
 let mongo = require("../services/mongo")
+let MiddlewareError = require("../../common/middleware-error")
 let nanoAccounts = require("../config/nano-accounts")
 let NanoClient = require("node-raiblocks-rpc")
 
@@ -26,14 +27,18 @@ router.post("/use", verifyVoucher, getVoucherBlocks, getVoucherUsage, verifyFund
 router.post("/refund", verifyVoucher, verifyFunds, refundBalance, returnVoucherBalance)
 
 function verifyVoucher(req, res, next) {
-  let signatureChecksOut = serviceWallet.verifyVoucher(req.body.voucher, req.body.paymentAccountAddress)
 
-  if (!signatureChecksOut) return next(new Error("Voucher failed signature verification."))
+  try {
+    serviceWallet.verifyVoucher(req.body.voucher, req.body.clientPaymentAccount)
+  }
+  catch(err) {
+    return next(err)
+  }
 
   let {voucher} = serviceWallet.decodeVoucher(req.body.voucher)
 
-  if (nanoAccounts.indexOf(voucher.servicePaymentAccount) === -1) return next(new Error("servicePaymentAccount does not match an account managed by this server."))
-  if (voucher.clientPaymentAccount !== req.body.paymentAccountAddress) return next(new Error("Client payment account addresses do not match."))
+  if (nanoAccounts.indexOf(voucher.servicePaymentAccount) === -1) return next(new MiddlewareError("servicePaymentAccount does not match an account managed by this server.", {statusCode: 400}))
+  if (voucher.clientPaymentAccount !== req.body.clientPaymentAccount) return next(new MiddlewareError("Client payment account addresses do not match.", {statusCode: 400}))
 
   req.voucher = voucher
 
@@ -63,7 +68,7 @@ function getVoucherBlocks(req, res, next) {
       return block.source === voucher.clientPaymentAccount
     })
 
-    if (voucherBlocks.length === 0) return next(new Error("No payment blocks found."))
+    if (voucherBlocks.length === 0) return next(new MiddlewareError("No payment blocks found.", {statusCode: 401}))
 
     req.voucher.blocks = voucherBlocks
 
@@ -132,12 +137,8 @@ function verifyFunds(req, res, next) {
     return blocks
   }, { used: [], available: [] })
 
-  //Need to refund these used blocks eventually
-
-  console.log("BLOCKS", blocks)
-
   if (blocks.available.length === 0) {
-    return next(new Error("Resource costs more than the value of the voucher."))
+    return next(new MiddlewareError("Resource costs more than the value of the voucher.", {statusCode: 402}))
   }
 
   voucher.block = blocks.available[0]
@@ -150,7 +151,7 @@ function returnVerificationResult(req, res, next) {
 }
 
 function deductCost(req, res, next) {
-  if (!req.body.cost) return next(new Error("Cost to deduct not supplied."))
+  if (!req.body.cost) return next(new MiddlewareError("Cost to deduct not supplied.", { statusCode: 400 }))
 
   let {voucher} = req
   let {cost} = req.body

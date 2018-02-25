@@ -1,6 +1,7 @@
+let request = require("request")
 let {Wallet} = require("rai-wallet")
 
-let MiddlwareError = require("../common/middleware-error")
+let MiddlewareError = require("../common/middleware-error")
 
 let serviceWallet = Wallet("TEST")
 
@@ -27,8 +28,8 @@ function fourOhTwo(opts = {}) {
 
     let {voucher} = serviceWallet.decodeVoucher(encodedVoucher, clientPaymentAccount)
 
-    if (voucher.servicePaymentAccount !== servicePaymentAccount) throw new MiddlwareError("Service payment account does not match voucher", {statusCode: 400})
-    if (voucher.clientPaymentAccount !== clientPaymentAccount) throw new MiddlwareError("Client payment account does not match voucher", {statusCode: 400})
+    if (voucher.servicePaymentAccount !== servicePaymentAccount) throw new MiddlewareError("Service payment account does not match voucher", {statusCode: 400})
+    if (voucher.clientPaymentAccount !== clientPaymentAccount) throw new MiddlewareError("Client payment account does not match voucher", {statusCode: 400})
 
     verifyVoucherWithPaymentService(opts, (err) => {
       if (err) return next(err)
