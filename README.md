@@ -1,6 +1,6 @@
 # Four Oh Two
 
-This module implements an experimental micro-transaction layer on top of HTTP using the Nano currency.
+This repository implements an experimental micro-transaction layer on top of HTTP using the Nano currency.
 
 ## Why Nano?
 
@@ -113,3 +113,16 @@ The server implementation should allow for:
   Secret: Payment-Account-Address Private Key
 
 2. Encrypt JWT with server's public key
+
+## Implementation details with NANO
+
+| N  | Payment flow | Voucher flow |
+|:--:|:------------ |:------------ |
+| 1. | client sends a payment to the service's wallet | client creates and signs a voucher with their wallet's private key |
+| 2. | service does not send a receive block immediately | client embeds the voucher in requests to the service |
+| 3. | service keeps and internal record of requests against each pending send block | client uses up their voucher's value (which can be monitored via response headers) |
+| 4. | the service adds a receive block for the associated still pending send block | client is notified 402 Payment required. |
+
+* The client can pre-empt the 402 by sending another send block to the service account.
+* If another send block is present for the client, we will automatically roll-over any leftover balance.
+* If not, we will send a refund (depending on minimum transaction details)
