@@ -69,6 +69,8 @@ function makeRequest(opts, cb) {
       return makeRequest(retryOpts, cb)
     }
 
+    console.log(response.headers)
+
     if (response.statusCode !== 200) console.log("Status code", response.statusCode)
 
     return cb(null, body)
