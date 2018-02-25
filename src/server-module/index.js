@@ -22,8 +22,11 @@ function fourOhTwo(opts = {}) {
     let encodedVoucher = req.headers["x-payment-voucher"]
     let clientPaymentAccount = req.headers["x-payment-account-address"]
 
-    if (!serviceWallet.verifyVoucher(encodedVoucher, clientPaymentAccount)) {
-      return res.status(402).json(generate402(opts))
+    try {
+      serviceWallet.verifyVoucher(encodedVoucher, clientPaymentAccount)
+    }
+    catch(e) {
+      return next(new MiddlewareError(e.message, {statusCode: 401}))
     }
 
     let {voucher} = serviceWallet.decodeVoucher(encodedVoucher, clientPaymentAccount)
