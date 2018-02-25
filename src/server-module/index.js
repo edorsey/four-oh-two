@@ -31,13 +31,13 @@ function fourOhTwo(opts = {}) {
     if (voucher.servicePaymentAccount !== servicePaymentAccount) throw new MiddlewareError("Service payment account does not match voucher", {statusCode: 400})
     if (voucher.clientPaymentAccount !== clientPaymentAccount) throw new MiddlewareError("Client payment account does not match voucher", {statusCode: 400})
 
-    verifyVoucherWithPaymentService(opts, (err) => {
+    verifyVoucherWithPaymentService(encodedVoucher, clientPaymentAccount, opts, (err) => {
       if (err) return next(err)
       next()
     })
 
     req.on("end", function () {
-      recordVoucherUsageWithPaymentService()
+      recordVoucherUsageWithPaymentService(encodedVoucher, clientPaymentAccount, opts)
     })
 
   }
@@ -64,13 +64,47 @@ function setPaymentHeaders(res, opts = {}) {
   return res
 }
 
-function verifyVoucherWithPaymentService(opts, cb) {
+function verifyVoucherWithPaymentService(encodedVoucher, clientPaymentAccount, opts, cb) {
   console.log("VERIFY VOUCHER WITH PAYMENT SERVICE")
-  return cb()
+
+  let requestOpts = {
+    uri: `${opts.paymentManagerURI}/voucher/verify`,
+    method: "POST",
+    json: {
+      voucher: encodedVoucher,
+      clientPaymentAccount,
+      cost: opts.cost
+    }
+  }
+
+  request(requestOpts, (err, response, body) => {
+    if (err) return cb(err)
+    console.log("VERIFY VOUCHER - SERVICE RESPONSE", response.statusCode, body)
+    if (response.statusCode !== 200) return cb(new MiddlewareError(body.err, {statusCode: response.statusCode}))
+    return cb()
+  })
+
 }
 
-function recordVoucherUsageWithPaymentService(opts) {
+function recordVoucherUsageWithPaymentService(encodedVoucher, clientPaymentAccount, opts) {
   console.log("RECORD VOUCHER USAGE WITH PAYMENT SERVICE")
+
+  let requestOpts = {
+    uri: `${opts.paymentManagerURI}/voucher/use`,
+    method: "POST",
+    json: {
+      voucher: encodedVoucher,
+      clientPaymentAccount,
+      cost: opts.cost
+    }
+  }
+
+  request(requestOpts, (err, response, body) => {
+    if (err) return cb(err)
+    console.log("RECORD USAGE - SERVICE RESPONSE", response.statusCode, body)
+    if (response.statusCode !== 200) return cb(new MiddlewareError(body.err, {statusCode: response.statusCode}))
+    return cb()
+  })
 }
 
 module.exports = fourOhTwo
