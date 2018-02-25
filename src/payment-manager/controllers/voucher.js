@@ -10,6 +10,10 @@ let NanoClient = require("node-raiblocks-rpc")
 const NANO_NODE_ADDRESS = "http://192.168.1.5:7076"
 const nano = new NanoClient(NANO_NODE_ADDRESS, true)
 
+BigNumber.config({
+  EXPONENTIAL_AT: [-20, 40]
+})
+
 let router = express.Router()
 
 let serviceWallet = Wallet("TEST")
