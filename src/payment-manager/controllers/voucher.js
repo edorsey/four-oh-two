@@ -22,7 +22,7 @@ let serviceSeed = "5106F02332991576DC2A95DC74AB8B7F985F42382B8BAAE84FAA6794AE788
 serviceWallet.createWallet(serviceSeed)
 
 
-router.post("/verify", verifyVoucher, getVoucherBlocks, getVoucherUsage, returnVerificationResult)
+router.post("/verify", verifyVoucher, getVoucherBlocks, getVoucherUsage, verifyFunds, returnVoucherBalance)
 router.post("/use", verifyVoucher, getVoucherBlocks, getVoucherUsage, verifyFunds, deductCost, returnVoucherBalance)
 router.post("/refund", verifyVoucher, verifyFunds, refundBalance, returnVoucherBalance)
 
@@ -109,7 +109,6 @@ function getVoucherUsage(req, res, next) {
 function calculateVoucherUsage(blocks) {
   return _.map(blocks, (block) => {
     block.amountUsed = _.reduce(block.uses, (totalAmountUsed, use) => {
-      console.log("TOTAL AMOUNT USED", totalAmountUsed)
       return totalAmountUsed.plus(BigNumber(use.amount || 0))
     }, BigNumber(0))
 
@@ -146,10 +145,6 @@ function verifyFunds(req, res, next) {
   return next()
 }
 
-function returnVerificationResult(req, res, next) {
-  res.json(req.voucher)
-}
-
 function deductCost(req, res, next) {
   if (!req.body.cost) return next(new MiddlewareError("Cost to deduct not supplied.", { statusCode: 400 }))
 
@@ -179,6 +174,7 @@ function returnVoucherBalance(req, res, next) {
   let {voucher} = req
 
   voucher.blocks = calculateVoucherUsage(voucher.blocks)
+  voucher.balance = _.reduce(voucher.blocks, (totalAmountLeft, block) => { return totalAmountLeft.plus(block.amountLeft) }, BigNumber(0))
 
   res.json(voucher)
 }
