@@ -13,10 +13,13 @@ let serviceAccounts = serviceWallet.getAccounts()
 let servicePaymentAccount = serviceAccounts[0].account
 
 function fourOhTwo(opts = {}) {
+  if (opts.paymentRequired !== false) opts.paymentRequired = true
+
   return function middleware(req, res, next) {
     setPaymentHeaders(res, opts)
     if (!req.headers["x-payment-voucher"]) {
-      return res.status(402).json(generate402(opts))
+      if (opts.paymentRequired) return next(new MiddlewareError("Payment required.", {statusCode: 402}))
+      return next()
     }
 
     let encodedVoucher = req.headers["x-payment-voucher"]
