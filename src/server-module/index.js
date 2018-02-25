@@ -1,6 +1,6 @@
 let {Wallet} = require("rai-wallet")
 
-let MiddlwareError = require("./middleware-error")
+let MiddlwareError = require("../common/middleware-error")
 
 let serviceWallet = Wallet("TEST")
 
