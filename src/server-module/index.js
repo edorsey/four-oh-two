@@ -107,7 +107,8 @@ function recordVoucherUsageWithPaymentService(encodedVoucher, clientPaymentAccou
 
   request(requestOpts, (err, response, body) => {
     if (err) {
-      console.log("ERROR RECORDING USAGE, TRANSACTION FREE") //Probably something to handle
+      console.log("ERROR RECORDING USAGE, TRANSACTION FREE", err) //Probably something to handle
+      return
     }
     console.log("RECORD USAGE - SERVICE RESPONSE", response.statusCode, body)
   })

@@ -1,4 +1,5 @@
 let _ = require("lodash")
+let async = require("async")
 let BigNumber = require("bignumber.js")
 let express = require("express")
 let {Wallet} = require("rai-wallet")
@@ -8,7 +9,7 @@ let MiddlewareError = require("../../common/middleware-error")
 let nanoAccounts = require("../config/nano-accounts")
 let NanoClient = require("node-raiblocks-rpc")
 
-const NANO_NODE_ADDRESS = "http://192.168.1.5:7076"
+const NANO_NODE_ADDRESS = "http://192.168.1.206:7076"
 const nano = new NanoClient(NANO_NODE_ADDRESS, true)
 
 BigNumber.config({
@@ -23,7 +24,7 @@ serviceWallet.createWallet(serviceSeed)
 
 
 router.post("/verify", verifyVoucher, getVoucherBlocks, getVoucherUsage, verifyFunds, returnVoucherBalance)
-router.post("/use", verifyVoucher, getVoucherBlocks, getVoucherUsage, verifyFunds, deductCost, returnVoucherBalance)
+router.post("/use", verifyVoucher, getVoucherBlocks, getVoucherUsage, verifyFunds, deductCost, processUsedBlock, returnVoucherBalance)
 router.post("/refund", verifyVoucher, verifyFunds, refundBalance, returnVoucherBalance)
 
 function verifyVoucher(req, res, next) {
@@ -55,6 +56,10 @@ function getVoucherBlocks(req, res, next) {
       blocks: {
         xrb_1niabkx3gbxit5j5yyqcpas71dkffggbr6zpd3heui8rpoocm5xqbdwq44oh: {
           '025EEE81C169ADA929513794C3BFEFE7E5C2F41CE320A2D58F7256418EE272E8': {
+            amount: '32700000000000000000000000000000',
+            source: voucher.clientPaymentAccount
+          },
+          '035EEE81C169ADA929513794C3BFEFE7E5C2F41CE320A2D58F7256418EE272E8': {
             amount: '32700000000000000000000000000000',
             source: voucher.clientPaymentAccount
           }
@@ -98,6 +103,8 @@ function getVoucherUsage(req, res, next) {
       let blockUses = _.reduce(voucherUsage, (blockUses, voucherUse) => {
         let blockUse = _.find(voucherUse.blocks, (voucherUseBlock) => voucherUseBlock.hash == block.hash)
 
+        if (!blockUse) return blockUses
+
         blockUses.push({
           amount: blockUse.amount,
           createdAt: voucherUse.createdAt,
@@ -118,7 +125,6 @@ function getVoucherUsage(req, res, next) {
 
 function calculateVoucherUsage(blocks) {
   return _.map(blocks, (block) => {
-    console.log("BLOCK", block.uses[0])
     block.amountUsed = _.reduce(block.uses, (totalAmountUsed, use) => {
       return totalAmountUsed.plus(BigNumber(use.amount || 0))
     }, BigNumber(0))
@@ -152,7 +158,7 @@ function verifyFunds(req, res, next) {
   }
 
   voucher.block = blocks.available[0]
-  if (blocks.used.length > 0) voucher.usedBlock = blocks.used[0]
+  if (blocks.used.length > 0 && blocks.used[0].amountLeft.isGreaterThan(0)) voucher.usedBlock = blocks.used[0]
 
   return next()
 }
@@ -202,7 +208,7 @@ function deductCost(req, res, next) {
     if (err) return next(err)
     voucher.block.uses.push(blockUse)
     if (usedBlockUse && voucher.usedBlock) {
-      voucher.usedBlock.use.push(usedBlockUse)
+      voucher.usedBlock.uses.push(usedBlockUse)
     }
     next()
   })
@@ -211,6 +217,98 @@ function deductCost(req, res, next) {
 function refundBalance(req, res, next) {
 
   next()
+}
+
+function processUsedBlock(req, res, next) {
+  let {voucher} = req
+
+  voucher.blocks = calculateVoucherUsage(voucher.blocks)
+
+  let usedBlock
+
+  if (voucher.usedBlock.amountLeft.isEqualTo(0)) {
+    usedBlock = voucher.usedBlock
+  }
+  else if (voucher.block.amountLeft.isEqualTo(0)) {
+    usedBlock = voucher.block
+  }
+  else {
+    return next()
+  }
+
+  let block = serviceWallet.addPendingReceiveBlock(usedBlock.hash, voucher.servicePaymentAccount, voucher.clientPaymentAccount, usedBlock.amount)
+  let hash = block.getHash(true)
+
+  let db = mongo.getDB()
+
+  async.waterfall([
+    (cb) => {
+      let usedBlock = {
+        hash,
+        block: JSON.parse(block.getJSONBlock())
+      }
+
+      db.collection("used-blocks").insertOne(usedBlock, function(err) {
+        if (err) return cb(err)
+        cb()
+      })
+    },
+    (cb) => {
+      nano.work_generate(block.getPrevious()).then(function(response) {
+        block.setWork(response.work)
+        return cb()
+      })
+      .catch(cb)
+    },
+    (cb) => {
+      db.collection("used-blocks").findOneAndUpdate({
+        hash: block.getHash(true)
+      },
+      { $set: { block: JSON.parse(block.getJSONBlock()) } },
+      {new: true},
+      function(err, result) {
+        if (err) return cb(err)
+        cb()
+      })
+    },
+    (cb) => {
+      let blockJSON = block.getJSONBlock()
+      nano.process(blockJSON).then(function(response) {
+        return cb(null, response)
+      }).catch(cb)
+    },
+    (processBlockResult, cb) => {
+      let update = {}
+
+      if (processBlockResult.error) {
+        update["$push"] = {
+          errors: {
+            error: processBlockResult.error,
+            erroredAt: new Date()
+          }
+        }
+      }
+      else {
+        update["$set"] = {
+          processedAt: new Date()
+        }
+      }
+
+      db.collection("used-blocks").findOneAndUpdate({
+        hash: block.getHash(true)
+      },
+      update,
+      {new: true},
+      function(err, result) {
+        if (err) return cb(err)
+        cb()
+      })
+    }
+  ], (err) => {
+    if (err) next(err)
+    next()
+  })
+
 }
 
 function returnVoucherBalance(req, res, next) {
