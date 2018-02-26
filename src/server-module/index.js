@@ -50,14 +50,6 @@ function fourOhTwo(opts = {}) {
   }
 }
 
-function generate402(opts = {}) {
-  return {
-    serviceAccount: opts.serviceAccount,
-    hostname: opts.hostname,
-    currency: opts.currency
-  }
-}
-
 function setPaymentHeaders(res, opts = {}) {
   let cost = 0
 
