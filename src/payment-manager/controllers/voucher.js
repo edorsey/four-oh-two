@@ -21,6 +21,7 @@ let router = express.Router()
 let serviceWallet = Wallet("TEST")
 let serviceSeed = "5106F02332991576DC2A95DC74AB8B7F985F42382B8BAAE84FAA6794AE78851F"
 serviceWallet.createWallet(serviceSeed)
+serviceWallet.setMinimumReceive("1000000000000000000") //uxrb
 
 
 router.post("/verify", verifyVoucher, getVoucherBlocks, getVoucherUsage, verifyFunds, processUsedBlock, returnVoucherBalance)
