@@ -83,7 +83,7 @@ function getVoucherUsage(req, res, next) {
   let db = mongo.getDB()
 
   db.collection("voucher-usage").find({
-    blockHash: { $in: blockHashes }
+    "blocks.hash": { $in: blockHashes }
   }, { sort: { createdAt: -1 } }).toArray(function foundVoucherUsage(err, voucherUsage) {
     if (err) return next(err)
 
@@ -94,13 +94,23 @@ function getVoucherUsage(req, res, next) {
 
     if (!voucherUsage) return next()
 
-    req.voucher.blocks = _.reduce(voucherUsage, (blocks, voucherUse) => {
-      let block = _.find(blocks, (block) => block.hash === voucherUse.blockHash)
+    req.voucher.blocks = _.map(req.voucher.blocks, (block) => {
+      let blockUses = _.reduce(voucherUsage, (blockUses, voucherUse) => {
+        let blockUse = _.find(voucherUse.blocks, (voucherUseBlock) => voucherUseBlock.hash == block.hash)
 
-      block.uses.push(voucherUse)
+        blockUses.push({
+          amount: blockUse.amount,
+          createdAt: voucherUse.createdAt,
+          resourceURI: voucherUse.resourceURI
+        })
 
-      return blocks
-    }, req.voucher.blocks)
+        return blockUses
+      }, [])
+
+      block.uses = blockUses
+
+      return block
+    })
 
     next()
   })
@@ -108,6 +118,7 @@ function getVoucherUsage(req, res, next) {
 
 function calculateVoucherUsage(blocks) {
   return _.map(blocks, (block) => {
+    console.log("BLOCK", block.uses[0])
     block.amountUsed = _.reduce(block.uses, (totalAmountUsed, use) => {
       return totalAmountUsed.plus(BigNumber(use.amount || 0))
     }, BigNumber(0))
@@ -141,6 +152,7 @@ function verifyFunds(req, res, next) {
   }
 
   voucher.block = blocks.available[0]
+  if (blocks.used.length > 0) voucher.usedBlock = blocks.used[0]
 
   return next()
 }
@@ -149,18 +161,49 @@ function deductCost(req, res, next) {
   if (!req.body.cost) return next(new MiddlewareError("Cost to deduct not supplied.", { statusCode: 400 }))
 
   let {voucher} = req
-  let {cost} = req.body
+  let cost = BigNumber(req.body.cost)
 
-  let use = {
-    blockHash: voucher.block.hash,
+  let blockUse = {
+    createdAt: new Date(),
     amount: cost
   }
 
+  let usedBlockUse
+
+  let use = _.assign({}, blockUse, {
+    blocks: [{
+      hash: voucher.block.hash,
+      amount: cost
+    }]
+  })
+
+  if (voucher.usedBlock) {
+    usedBlockUse = _.assign({}, blockUse, {
+      amount: voucher.usedBlock.amountLeft
+    })
+
+    use.blocks.push({
+      hash: voucher.usedBlock.hash,
+      amount: voucher.usedBlock.amountLeft
+    })
+
+    let remainingBalance = cost.minus(voucher.usedBlock.amountLeft)
+    use.blocks[0].amount = remainingBalance
+    blockUse.amount = remainingBalance
+  }
+
+  if (req.body.resourceURI) use.resourceURI = req.body.resourceURI
+
   let db = mongo.getDB()
 
-  db.collection("voucher-usage").insertOne(use, (err, result) => {
+  let rawUse = JSON.parse(JSON.stringify(use))
+
+  db.collection("voucher-usage").insertOne(rawUse, (err, result) => {
     if (err) return next(err)
-    voucher.block.uses.push(use)
+    voucher.block.uses.push(blockUse)
+    if (usedBlockUse && voucher.usedBlock) {
+      voucher.usedBlock.use.push(usedBlockUse)
+    }
     next()
   })
 }

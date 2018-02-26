@@ -60,6 +60,7 @@ function makeRequest(opts, cb) {
     if (requestAttempts > 5) {
       return cb(new Error(`Exceeded max request attempts, ${requestAttempts}`))
     }
+    console.log(response.statusCode, body)
 
     if (response.statusCode === 402) {
       let paymentOpts = parsePaymentHeaders(response.headers)

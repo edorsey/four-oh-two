@@ -44,6 +44,7 @@ function fourOhTwo(opts = {}) {
     })
 
     req.on("end", function () {
+      if ([400, 401, 402].indexOf(res.statusCode) > -1) return
       recordVoucherUsageWithPaymentService(encodedVoucher, clientPaymentAccount, opts)
     })
   }
@@ -85,7 +86,7 @@ function verifyVoucherWithPaymentService(encodedVoucher, clientPaymentAccount, o
 
   request(requestOpts, (err, response, body) => {
     if (err) return cb(err)
-    if (response.statusCode !== 200) return cb(new MiddlewareError(body.err, {statusCode: response.statusCode}))
+    if (response.statusCode !== 200) return cb(new MiddlewareError(body.error, {statusCode: response.statusCode}))
     return cb(null, body)
   })
 
