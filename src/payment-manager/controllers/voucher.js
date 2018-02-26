@@ -2,7 +2,7 @@ let _ = require("lodash")
 let async = require("async")
 let BigNumber = require("bignumber.js")
 let express = require("express")
-let {Wallet} = require("rai-wallet")
+let {Block, Wallet} = require("rai-wallet")
 
 let mongo = require("../services/mongo")
 let MiddlewareError = require("../../common/middleware-error")
@@ -23,7 +23,7 @@ let serviceSeed = "5106F02332991576DC2A95DC74AB8B7F985F42382B8BAAE84FAA6794AE788
 serviceWallet.createWallet(serviceSeed)
 
 
-router.post("/verify", verifyVoucher, getVoucherBlocks, getVoucherUsage, verifyFunds, returnVoucherBalance)
+router.post("/verify", verifyVoucher, getVoucherBlocks, getVoucherUsage, verifyFunds, processUsedBlock, returnVoucherBalance)
 router.post("/use", verifyVoucher, getVoucherBlocks, getVoucherUsage, verifyFunds, deductCost, processUsedBlock, returnVoucherBalance)
 router.post("/refund", verifyVoucher, verifyFunds, refundBalance, returnVoucherBalance)
 
@@ -59,10 +59,10 @@ function getVoucherBlocks(req, res, next) {
             amount: '32700000000000000000000000000000',
             source: voucher.clientPaymentAccount
           },
-          '035EEE81C169ADA929513794C3BFEFE7E5C2F41CE320A2D58F7256418EE272E8': {
+          /*'035EEE81C169ADA929513794C3BFEFE7E5C2F41CE320A2D58F7256418EE272E8': {
             amount: '32700000000000000000000000000000',
             source: voucher.clientPaymentAccount
-          }
+          }*/
         }
       }
     }
@@ -153,18 +153,22 @@ function verifyFunds(req, res, next) {
     return blocks
   }, { used: [], available: [] })
 
+  /*
   if (blocks.available.length === 0) {
     return next(new MiddlewareError("Resource costs more than the value of the voucher.", {statusCode: 402}))
   }
+  */
 
-  voucher.block = blocks.available[0]
+  if (blocks.available.length > 0) voucher.block = blocks.available[0]
   if (blocks.used.length > 0 && blocks.used[0].amountLeft.isGreaterThan(0)) voucher.usedBlock = blocks.used[0]
 
   return next()
 }
 
+
 function deductCost(req, res, next) {
   if (!req.body.cost) return next(new MiddlewareError("Cost to deduct not supplied.", { statusCode: 400 }))
+  if (!req.voucher.block) return next(new MiddlewareError("Refill your voucher with more NANO to continue using this endpoint.", { statusCode: 402 }))
 
   let {voucher} = req
   let cost = BigNumber(req.body.cost)
@@ -220,95 +224,153 @@ function refundBalance(req, res, next) {
 }
 
 function processUsedBlock(req, res, next) {
+  console.log("PROCESS USED BLOCK", req.voucher)
   let {voucher} = req
 
   voucher.blocks = calculateVoucherUsage(voucher.blocks)
 
   let usedBlock
+  console.log("1", voucher.usedBlock && voucher.usedBlock.amountLeft.isEqualTo(0))
+  console.log("2", voucher.block && voucher.block.amountLeft.isEqualTo(0))
 
-  if (voucher.usedBlock.amountLeft.isEqualTo(0)) {
+  if (voucher.usedBlock && voucher.usedBlock.amountLeft.isEqualTo(0)) {
     usedBlock = voucher.usedBlock
   }
-  else if (voucher.block.amountLeft.isEqualTo(0)) {
+  else if(voucher.usedBlock && !voucher.block) {
+    usedBlock = voucher.usedBlock
+  }
+  else if (voucher.block && voucher.block.amountLeft.isEqualTo(0)) {
     usedBlock = voucher.block
   }
   else {
     return next()
   }
 
-  let block = serviceWallet.addPendingReceiveBlock(usedBlock.hash, voucher.servicePaymentAccount, voucher.clientPaymentAccount, usedBlock.amount)
-  let hash = block.getHash(true)
 
   let db = mongo.getDB()
 
-  async.waterfall([
-    (cb) => {
-      let usedBlock = {
-        hash,
-        block: JSON.parse(block.getJSONBlock())
-      }
+  db.collection("used-blocks").find({
+    "block.source": usedBlock.hash
+  }).toArray(function(err, result) {
+    if (err) return next(err)
+    console.log("USED BLOCKS FIND", result)
+    if (result.length > 0) return next(new MiddlewareError("Resource costs more than the value of the voucher. A refund has previously been initiated for your remaining balance.", {statusCode: 402}))
 
-      db.collection("used-blocks").insertOne(usedBlock, function(err) {
-        if (err) return cb(err)
-        cb()
-      })
-    },
-    (cb) => {
-      nano.work_generate(block.getPrevious()).then(function(response) {
-        block.setWork(response.work)
-        return cb()
-      })
-      .catch(cb)
-    },
-    (cb) => {
-      db.collection("used-blocks").findOneAndUpdate({
-        hash: block.getHash(true)
+    let block = serviceWallet.addPendingReceiveBlock(usedBlock.hash, voucher.servicePaymentAccount, voucher.clientPaymentAccount, usedBlock.amount)
+
+    let hash = block.getHash(true)
+
+    async.waterfall([
+      (cb) => {
+        let usedBlock = {
+          hash,
+          block: JSON.parse(block.getJSONBlock())
+        }
+
+        db.collection("used-blocks").insertOne(usedBlock, function(err) {
+          if (err) return cb(err)
+          cb()
+        })
       },
-      { $set: { block: JSON.parse(block.getJSONBlock()) } },
-      {new: true},
-      function(err, result) {
-        if (err) return cb(err)
-        cb()
-      })
-    },
-    (cb) => {
-      let blockJSON = block.getJSONBlock()
-      nano.process(blockJSON).then(function(response) {
-        return cb(null, response)
-      }).catch(cb)
-    },
-    (processBlockResult, cb) => {
-      let update = {}
+      (cb) => {
+        nano.work_generate(block.getPrevious()).then(function(response) {
+          block.setWork(response.work)
+          return cb()
+        })
+        .catch(cb)
+      },
+      (cb) => {
+        db.collection("used-blocks").findOneAndUpdate({
+          hash: block.getHash(true)
+        },
+        { $set: { block: JSON.parse(block.getJSONBlock()) } },
+        {new: true},
+        function(err, result) {
+          if (err) return cb(err)
+          cb()
+        })
+      },
+      (cb) => {
+        let blockJSON = block.getJSONBlock()
+        nano.process(blockJSON).then(function(response) {
+          return cb(null, response)
+        }).catch(cb)
+      },
+      (processBlockResult, cb) => {
+        let update = {}
 
-      if (processBlockResult.error) {
-        update["$push"] = {
-          errors: {
-            error: processBlockResult.error,
-            erroredAt: new Date()
+        if (processBlockResult.error) {
+          update["$push"] = {
+            errors: {
+              error: processBlockResult.error,
+              erroredAt: new Date()
+            }
           }
         }
-      }
-      else {
-        update["$set"] = {
-          processedAt: new Date()
+        else {
+          update["$set"] = {
+            processedAt: new Date()
+          }
         }
-      }
 
-      db.collection("used-blocks").findOneAndUpdate({
-        hash: block.getHash(true)
+        db.collection("used-blocks").findOneAndUpdate({
+          hash: block.getHash(true)
+        },
+        update,
+        {new: true},
+        function(err, result) {
+          if (err) return cb(err)
+          cb()
+        })
       },
-      update,
-      {new: true},
-      function(err, result) {
-        if (err) return cb(err)
-        cb()
-      })
-    }
-  ], (err) => {
-    if (err) next(err)
-    next()
-  })
+      (cb) => {
+        if (voucher.block) return cb(null, null)
 
+        console.log("LETS REFUND SOME SHIT")
+
+        nano.account_balance(voucher.servicePaymentAccount).then(function(response) {
+          var refundBlock = new Block()
+          var lastBlock = block.getHash(true)
+
+          let balance = BigNumber(response.balance)
+
+          refundBlock.setSendParameters(lastBlock, voucher.clientPaymentAccount, balance.minus(voucher.usedBlock.amountLeft))
+    	    refundBlock.build()
+    	    serviceWallet.signBlock(refundBlock)
+    	    refundBlock.setAmount(voucher.usedBlock.amountLeft.toString())
+    	    refundBlock.setAccount(voucher.servicePaymentAccount)
+
+          return cb(null, refundBlock)
+
+        })
+        .catch(cb)
+      },
+      (refundBlock, cb) => {
+        if (!refundBlock) return cb(null, null)
+
+        nano.work_generate(refundBlock.getPrevious()).then(function(response) {
+          refundBlock.setWork(response.work)
+          return cb(null, refundBlock)
+        })
+        .catch(cb)
+      },
+      (refundBlock, cb) => {
+        if (!refundBlock) return cb(null, null)
+
+        let refundBlockJSON = refundBlock.getJSONBlock()
+        console.log("REFUND", refundBlockJSON)
+        nano.process(refundBlockJSON).then(function(response) {
+          console.log("BLOCK PROCESS", response)
+          return next(new MiddlewareError("Resource costs more than the value of the voucher. A refund has been initiated for your remaining balance.", {statusCode: 402}))
+          return cb(null, response)
+        })
+        .catch(cb)
+      }
+    ], (err) => {
+      if (err) next(err)
+      next()
+    })
+  })
 }
 
 function returnVoucherBalance(req, res, next) {
